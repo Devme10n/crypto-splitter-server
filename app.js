@@ -38,8 +38,39 @@ function logError(err) {
 // 3. 파일 RSA 암호화 (아직 구현되지 않음)
 //---------------------------------------------------------
 
+
 //---------------------------------------------------------
-// 4. 파일 분할 && 5. 분할된 파일들의 이름 변경 및 매핑 정보 생성
+// 4. 파일 분할
+//---------------------------------------------------------
+async function splitEncryptedFile(filePath, splitCount) { // 이름을 splitEncryptedFile로 변경함
+    let originalFileNames;
+    
+    if (!fs.existsSync(filePath)) {
+        const err = new Error(`파일이 존재하지 않습니다: ${filePath}`);
+        logError(err);
+        return { error: err };
+    }
+    
+    const fileName = path.basename(filePath);
+    const folderPath = path.join(process.cwd(), 'temp', fileName);
+    if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+    }
+    
+    try {
+        originalFileNames = await splitFile.splitFile(filePath, splitCount);
+    } catch(err) {
+        const error = new Error(`파일 분할 중 오류 발생: ${err.message}`);
+        logError(error);
+        return { error };
+    }
+    
+    console.log('파일 분할 완료');
+    return { originalFileNames, folderPath };
+}
+    
+//---------------------------------------------------------
+// 5. 분할된 파일들의 이름 변경 및 매핑 정보 생성
 //---------------------------------------------------------
 
 // UUID 배열 생성
@@ -51,60 +82,29 @@ function getUUIDArray(num) {
     return arr;
 }
 
-//#############################################################################################
-// 2. 파일명 DES 암호화의 결과 => filePath => fileName추출 => 파일별 디렉토리 생성 => 파일 분할
-// des 안함
-//#############################################################################################
-async function splitFileAndRename(filePath, splitFileNamesArray) {
-    let renamedFilePaths = [];
-    let splitFileOrderMapping = {}; 
+function renameFilesAndCreateMapping(originalFileNames, splitFileNamesArray, folderPath) {
+let renamedFilePaths = [];
+let splitFileOrderMapping = {};
+
+originalFileNames.forEach((name, index) => {
+    const oldPath = name;
+    const newPath = path.join(folderPath, splitFileNamesArray[index]);
 
     try {
-        if (!fs.existsSync(filePath)) {
-            const err = new Error(`파일이 존재하지 않습니다: ${filePath}`);
-            logError(err);
-            return { error: err };
-        }
-
-        const fileName = path.basename(filePath);
-        const folderPath = path.join(process.cwd(), 'temp', fileName);
-        if (!fs.existsSync(folderPath)) {
-            fs.mkdirSync(folderPath, { recursive: true });
-        }
-        
-        let originalFileNames;
-
-        try {
-            originalFileNames = await splitFile.splitFile(filePath, splitFileNamesArray.length);
-        } catch(err) {
-            const error = new Error(`파일 분할 중 오류 발생: ${err.message}`);
-            logError(error);
-            return { error };
-        }
-        
-        originalFileNames.forEach((name, index) => {
-            const oldPath = name;
-            const newPath = path.join(folderPath, splitFileNamesArray[index]);
-        
-            try {
-                fs.renameSync(oldPath, newPath);
-            } catch(err) {
-                const error = new Error(`파일 이름 변경 중 오류 발생: ${err.message}`);
-                logError(error);
-                fs.rmSync(folderPath, { recursive: true }); // 오류 발생 시 생성된 디렉토리 삭제
-                return { error };
-            }
-        
-            renamedFilePaths.push(newPath);
-            splitFileOrderMapping[splitFileNamesArray[index]] = index;
-        }); 
-        
-        console.log('파일 분할 및 이름 변경 완료');
-        return { renamedFilePaths, splitFileOrderMapping };        
+        fs.renameSync(oldPath, newPath);
     } catch(err) {
-        logError(err);
-        return { error: err };
+        const error = new Error(`파일 이름 변경 중 오류 발생: ${err.message}`);
+        logError(error);
+        fs.rmSync(folderPath, { recursive: true }); // 오류 발생 시 생성된 디렉토리 삭제
+        return { error };
     }
+
+    renamedFilePaths.push(newPath);
+    splitFileOrderMapping[splitFileNamesArray[index]] = index;
+    });
+
+    console.log('파일 이름 변경 및 매핑 정보 생성 완료');
+    return { renamedFilePaths, splitFileOrderMapping };
 }
 
 //---------------------------------------------------------
@@ -161,9 +161,22 @@ async function split_file() {
     const uploadDirectoryPath = path.join(process.cwd(), 'uploadfile'); // 'uploadfile' 디렉토리 경로
     const uploadFilePath = path.join(uploadDirectoryPath, 'dummyfile');
     const uuidFileNamesArray = getUUIDArray(100); // 먼저 UUID 배열 생성
-    const { renamedFilePaths, splitFileOrderMapping } = await splitFileAndRename(uploadFilePath, uuidFileNamesArray); 
-    console.log("splitFileOrderMapping: ", splitFileOrderMapping)
 
+    // 파일 분할
+    const { originalFileNames, folderPath, error: splitError } = await splitEncryptedFile(uploadFilePath, uuidFileNamesArray.length);
+    if (splitError) {
+        logError(splitError);
+        return;
+    }
+
+    // 분할된 파일들의 이름 변경 및 매핑 정보 생성
+    const { renamedFilePaths, splitFileOrderMapping, error: renameError } = renameFilesAndCreateMapping(originalFileNames, uuidFileNamesArray, folderPath);
+    if (renameError) {
+        logError(renameError);
+        return;
+    }
+
+    console.log("splitFileOrderMapping: ", splitFileOrderMapping);
     return { renamedFilePaths, splitFileOrderMapping, uploadFilePath };
 }
 
@@ -180,6 +193,10 @@ async function merge_file({ renamedFilePaths, splitFileOrderMapping, uploadFileP
 // 메인 함수 실행
 async function main() {
     const splitResult = await split_file();
+    if (!splitResult) {
+        console.error('파일 분할 과정에서 오류가 발생했습니다.');
+        return;
+    }
     await merge_file(splitResult);
 }
 
