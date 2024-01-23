@@ -1,9 +1,15 @@
-// 오류 출력 함수
-function logError(err) {
-    console.error(`오류가 발생했습니다: ${err.message}`);
-    console.error(`오류 위치: ${err.stack}`);
-}
+const winston = require('winston');
 
-module.exports = {
-    logError
-};
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+    new winston.transports.Console({ level: 'info' })
+  ]
+});
+
+module.exports = { logger };
