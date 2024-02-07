@@ -1,59 +1,46 @@
-// app.js: 애플리케이션의 메인 실행 파일로서, writer, middle, reader 모듈의 기능을 조합하여 전체 프로세스를 실행
-
 const path = require('path');
-const { ensureTempDirectory, getUUIDArray, splitEncryptedFile } = require('./file-processing/writer');
-const { renameFilesAndCreateMapping } = require('./file-processing/middle');
-const { sortFiles, mergeFiles } = require('./file-processing/reader');
-const { logError } = require('./utils/logger'); // logError 함수 import
-const { compareFileHash } = require('./utils/comparefile'); // compareFileHash 함수 import (경로 수정)
+const { encryptAndSplitFile } = require('./file-processing/writer');
+const { renameFilesAndCreateMapping, uploadFiles } = require('./file-processing/middle');
 
-// 분할 작업을 수행하는 메인 함수
-async function split_file() {
-    await ensureTempDirectory();
-    const uploadDirectoryPath = path.join(process.cwd(), 'uploadfile'); // 'uploadfile' 디렉토리 경로
-    const uploadFilePath = path.join(uploadDirectoryPath, 'dummyfile');
-    const uuidFileNamesArray = getUUIDArray(100); // 먼저 UUID 배열 생성
+// Set original file path
+const originalFilePath = path.join(__dirname, 'uploadfile', 'dummyfile');
 
-    // 파일 분할
-    const { originalFileNames, folderPath, error: splitError } = await splitEncryptedFile(uploadFilePath, uuidFileNamesArray.length);
-    if (splitError) {
-        logError(splitError);
-        return;
-    }
+// Set the number of pieces to split
+const splitCount = 100; // Use random value as example
 
-    // 분할된 파일들의 이름 변경 및 매핑 정보 생성
-    const { renamedFilePaths, splitFileOrderMapping, error: renameError } = renameFilesAndCreateMapping(originalFileNames, uuidFileNamesArray, folderPath);
-    if (renameError) {
-        logError(renameError);
-        return;
-    }
+// Call file encryption and splitting functions
+encryptAndSplitFile(originalFilePath, splitCount)
+    .then(({ originalFileNames, splitFilesPath }) => {
+        console.log('The file name was encrypted and the file was split successfully.');
+        console.log('Number of split files:', originalFileNames.length);
+        console.log('Path where the split files are saved:', splitFilesPath);
 
-    console.log("splitFileOrderMapping: ", splitFileOrderMapping);
-    return { renamedFilePaths, splitFileOrderMapping, uploadFilePath };
-}
+        console.log('splitFilesPath:', splitFilesPath);
+        console.log('예시 원본 파일 이름:', originalFileNames[0]);
 
-// 병합 작업을 수행하는 메인 함수
-async function merge_file({ renamedFilePaths, splitFileOrderMapping, uploadFilePath }) {
-    // 파일 정렬
-    const sortedFilePaths = sortFiles(renamedFilePaths, splitFileOrderMapping);
 
-    // 파일 합치기
-    const outputPath = path.join(process.cwd(), 'output', 'dummyfile-output.bin');
-    await mergeFiles(sortedFilePaths, outputPath); 
+        // Change file name and generate mapping information
+        renameFilesAndCreateMapping(originalFileNames, splitFilesPath)
+            .then(({ renamedFilePaths, splitFileOrderMapping }) => {
+                console.log('File name change and mapping information creation completed.');
+                console.log('Changed file paths:', renamedFilePaths);
+                console.log('File mapping information:', splitFileOrderMapping);
 
-    // 원본 파일과 합쳐진 파일의 해시값 비교
-    const isFilesSame = await compareFileHash(uploadFilePath, outputPath);
-    console.log(isFilesSame ? '파일이 일치합니다.' : '파일이 일치하지 않습니다.');
-}
-
-// 메인 함수 실행
-async function main() {
-    const splitResult = await split_file();
-    if (!splitResult) {
-        console.error('파일 분할 과정에서 오류가 발생했습니다.');
-        return;
-    }
-    await merge_file(splitResult);
-}
-
-main();
+                // // file upload
+                // const uploadUrl = 'https://example.com/upload'; // Set URL to upload
+                // uploadFiles(renamedFilePaths, uploadUrl)
+                //     .then(() => {
+                //         console.log('File upload completed.');
+                //         // Add logic to save file mapping information here
+                //     })
+                //     .catch(error => {
+                //         console.error('An error occurred while uploading file:', error);
+                //     });
+            })
+            .catch(error => {
+                console.error('An error occurred while changing the file name and creating mapping information:', error);
+            });
+    })
+    .catch(error => {
+        console.error('An error occurred while processing and splitting the file:', error);
+    });
