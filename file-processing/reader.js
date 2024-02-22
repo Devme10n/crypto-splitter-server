@@ -1,13 +1,30 @@
-const splitFile = require('split-file');
 const { logError } = require('../utils/logger'); // logError 함수 import
+const FileMappingJson = require('../models/postgreSQLModels');
 
 //=============================================================================================
 // 파일 병합
 //=============================================================================================
 
 //---------------------------------------------------------
-// 8. fileOrderMapping 정보 조회 (아직 구현되지 않음)
+// 8. fileOrderMapping 정보 조회
 //---------------------------------------------------------
+async function getFileMappingInfo(encryptedFilename) {
+    try {
+        const mappingInfo = await FileMappingJson.findOne({
+            where: { encrypted_filename: encryptedFilename }
+        });
+
+        if (mappingInfo) {
+            return mappingInfo.mapping_info;
+        } else {
+            console.log(`${encryptedFilename} 파일 존재하지 않음`)
+            return null; // 해당 파일이 존재하지 않을 경우 처리
+        }
+    } catch (error) {
+        console.error('파일 매핑 정보 조회 중 오류 발생:', error);
+        return null;
+    }
+}
 
 //---------------------------------------------------------
 // 9. 분할된 파일들을 다운로드 (아직 구현되지 않음)
@@ -42,13 +59,16 @@ async function mergeFiles(sortedFileNames, outputPath) {
 //---------------------------------------------------------
 // 12. 파일명 복호화 (아직 구현되지 않음)
 //---------------------------------------------------------
+async function decryptFilename(filePath, encryptedFileName) {
 
+}
 //---------------------------------------------------------
 // 13. 파일 복호화 (아직 구현되지 않음)
 //---------------------------------------------------------
 
 module.exports = {
+    getFileMappingInfo,
     sortFiles,
-    mergeFiles
+    mergeFiles,
     //... (8~13번 기능의 export)
 };
