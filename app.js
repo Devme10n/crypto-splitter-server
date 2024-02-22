@@ -26,16 +26,16 @@ encryptAndSplitFile(originalFilePath, splitCount)
                 console.log('Changed file paths:', renamedFilePaths);
                 console.log('File mapping information:', splitFileOrderMapping);
 
-                // // file upload
-                // const uploadUrl = 'https://example.com/upload'; // Set URL to upload
-                // uploadFiles(renamedFilePaths, uploadUrl)
-                //     .then(() => {
-                //         console.log('File upload completed.');
-                //         // Add logic to save file mapping information here
-                //     })
-                //     .catch(error => {
-                //         console.error('An error occurred while uploading file:', error);
-                //     });
+                // file upload
+                const uploadUrl = 'http://localhost:3000/upload'; // Set URL to upload
+                uploadFiles(renamedFilePaths, uploadUrl)
+                    .then(() => {
+                        console.log('File upload completed.');
+                        // Add logic to save file mapping information here
+                    })
+                    .catch(error => {
+                        console.error('An error occurred while uploading file:', error);
+                    });
             })
             .catch(error => {
                 console.error('An error occurred while changing the file name and creating mapping information:', error);

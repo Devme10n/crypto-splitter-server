@@ -47,28 +47,32 @@ async function renameFilesAndCreateMapping(originalFileNames, folderPath) {
 // 6. 분할된 파일들을 인터넷에 업로드 (아직 구현되지 않음)
 // Promise.all()을 사용하여 병렬로 업로드
 //---------------------------------------------------------
-// async function uploadFiles(files, uploadUrl) {
-//     try {
-//         await Promise.all(files.map(async (file) => {
-//             const formData = new FormData();
-//             formData.append('file', fs.createReadStream(file), path.basename(file)); // fs 대신 기본 fs 모듈 사용
+async function uploadFiles(files, uploadUrl) {
+    try {
+        const uploadPromises = files.map(async (file) => {
+            const formData = new FormData();
+            formData.append('file', fs.createReadStream(file), path.basename(file));
 
-//             const response = await axios.post(uploadUrl, formData, {
-//                 headers: {
-//                     ...formData.getHeaders(),
-//                 },
-//             });
-//             logger.info(`File uploaded: ${file}`);
-//             return response;
-//         }));
-//         logger.info('All files uploaded successfully.');
-//     } catch (error) {
-//         logger.error(`Upload failed: ${error.message}`);
-//         await deleteFolderAndFiles(path.dirname(files[0]));
-//         logger.info('Cleanup completed after failed upload.');
-//         throw error;
-//     }
-// }
+            const response = await axios.post(uploadUrl, formData, {
+                headers: {
+                    ...formData.getHeaders(),
+                },
+            });
+            logger.info(`File uploaded: ${file}`);
+            return response;
+        });
+
+        const results = await Promise.all(uploadPromises);
+        logger.info('All files uploaded successfully.');
+        return results;
+    } catch (error) {
+        logger.error(`Upload failed: ${error.message}`);
+        // 폴더를 지워야함 파일이 아님 (수정 필요)
+        await deleteFolderAndFiles(path.dirname(files[0]));
+        logger.info('Cleanup completed after failed upload.');
+        throw error;
+    }
+}
 
 //---------------------------------------------------------
 // 7. fileOrderMapping 정보 저장 (아직 구현되지 않음)
