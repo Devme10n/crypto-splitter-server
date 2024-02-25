@@ -10,7 +10,7 @@ const tempPath = path.join(__dirname, '..', 'temp');
 
 /**
  * 임시 디렉토리 확인 및 생성
- * @description temp 폴더가 존재하지 않으면 생성합니다. 이미 존재하는 경우, 내용을 비우고 다시 생성합니다.
+ * @description temp 폴더가 존재하지 않으면 생성. 이미 존재하는 경우, 내용을 비우고 다시 생성.
  */
 async function ensureTempDirectory() {
     try {
@@ -34,7 +34,7 @@ async function ensureTempDirectory() {
         logger.info(`임시 디렉토리 생성됨: ${tempPath}`);
     } catch (error) {
         logger.error(`임시 디렉토리 처리 중 오류 발생: ${error.message}`);
-        throw error; // 오류를 상위 호출자에게 전파
+        throw error;
     }
 }
 
@@ -55,7 +55,7 @@ const AES_iv = Buffer.alloc(16, 0);
 
 /**
  * 파일명을 AES 암호화하여 반환
- * @description 주어진 파일명을 AES 암호화 알고리즘을 사용하여 암호화합니다.
+ * @description 주어진 파일명을 AES 암호화 알고리즘을 사용하여 암호화.
  * @param {string} fileName 암호화할 원본 파일명
  * @return {string} 암호화된 파일명
  */
@@ -69,7 +69,7 @@ function encryptFilename(fileName) {
 
 /**
  * 파일명 변경 (비동기)
- * @description 주어진 경로의 파일명을 암호화된 파일명으로 변경합니다.
+ * @description 주어진 경로의 파일명을 암호화된 파일명으로 변경.
  * @param {string} filePath 원본 파일 경로
  * @param {string} encryptedFileName 변경할 암호화된 파일명
  * @return {string} 변경된 파일의 경로
@@ -84,7 +84,7 @@ async function changeFilename(filePath, encryptedFileName) {
 
 /**
  * 2. 파일명 암호화 및 변경 처리 함수
- * @description 파일명을 암호화하고, 변경된 파일명으로 파일명을 업데이트합니다.
+ * @description 파일명을 암호화하고, 변경된 파일명으로 파일명을 업데이트.
  * @param {string} filePath 처리할 파일의 경로
  * @return {string} 변경된 파일의 경로
  */
@@ -110,7 +110,7 @@ async function processFilename(filePath) {
                 logger.error(`롤백 실패: ${rollbackError.message}`);
             }
         }
-        throw error; // 오류를 상위 호출자에게 전파
+        throw error;
     }
 }
 
@@ -158,15 +158,13 @@ async function encryptFile(inputFilePath, outputFilePath, publicKeyPath) {
 // const publicKeyPath = path.join(__dirname, '..', 'key', 'public_key.pem');
 // encryptFile(inputFilePath, outputFilePath, publicKeyPath);
 
-
-
 //---------------------------------------------------------
 // 4. 파일 분할
 //---------------------------------------------------------
 
 /**
  * 4. 파일 분할
- * @description 주어진 파일을 지정된 개수의 조각으로 분할하고, 분할된 파일들을 지정된 폴더에 저장합니다. 분할 과정에서 오류가 발생하면 생성된 폴더와 파일들을 롤백하여 삭제합니다.
+ * @description 주어진 파일을 지정된 개수의 조각으로 분할하고, 분할된 파일들을 지정된 폴더에 저장. 분할 과정에서 오류가 발생하면 생성된 폴더와 파일들을 롤백하여 삭제.
  * @param {string} encryptedFilePath RSA 암호화된 파일 경로
  * @param {number} splitCount 조각 개수(default: 100)
  * @return {Object} 분할 결과 객체, 포함하는 내용:
@@ -194,18 +192,19 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
         logger.error(`파일 분할 중 오류 발생: ${err.message}`);
         // 롤백 로직: 폴더 및 하위 파일 삭제
         if (splitFilesPath) {
-            await deleteFolderAndFiles(splitFilesPath);  // 롤백: 폴더 및 하위 파일 삭제
+            await deleteFolderAndFiles(splitFilesPath);
         }
-        throw err;  // 오류를 상위 호출자에게 전파
+        throw err;
     }
 }
 
 //---------------------------------------------------------
 // writer.js 모듈의 최종 함수
+// 이거 분리해서 app.js로 보내는게 맞지 않나?
 //---------------------------------------------------------
 /**
- * writer.js 모듈의 최종 함수, 파일 처리 및 분할의 최종 과정을 수행합니다.
- * @description 임시 디렉토리를 생성하고, 파일명을 암호화한 후, 파일을 지정된 개수의 조각으로 분할합니다. 분할된 파일 조각들은 지정된 폴더에 저장됩니다.
+ * writer.js 모듈의 최종 함수, 파일 처리 및 분할의 최종 과정을 수행.
+ * @description 임시 디렉토리를 생성하고, 파일명을 암호화한 후, 파일을 지정된 개수의 조각으로 분할. 분할된 파일 조각들은 지정된 폴더에 저장.
  * @param {string} originalFilePath 원본 파일 경로
  * @param {number} splitCount 분할할 조각의 개수
  * @return {Object} 분할 결과 객체, 포함하는 내용:
@@ -226,8 +225,8 @@ async function encryptAndSplitFile(originalFilePath, splitCount) {
         return splitResult;
     } catch (error) {
         logger.error(`파일 처리 및 분할 중 오류 발생: ${error.message}`);
-        // 필요한 경우 추가적인 롤백 작업 수행
-        throw error; // 오류를 상위 호출자에게 전파
+        // 롤백 로직
+        throw error;
     }
 }
 

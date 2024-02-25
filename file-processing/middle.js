@@ -15,7 +15,7 @@ const FileMappingJson = require('../models/postgreSQLModels');
 
 /**
  * 분할된 파일들의 이름을 uuid로 변경 및 매핑 정보 생성
- * @description 각 파일을 고유한 UUID를 사용하여 새로운 이름으로 변경하고, 변경된 파일명과 원래 인덱스의 매핑 정보를 생성합니다. 이 과정은 비동기적으로 수행됩니다.
+ * @description 각 파일을 고유한 UUID를 사용하여 새로운 이름으로 변경하고, 변경된 파일명과 원래 인덱스의 매핑 정보를 생성. 비동기적으로 수행.
  * @param {string[]} originalFileNames - 원본 파일의 전체 경로를 포함하는 문자열 배열
  * @param {string} folderPath - 파일이 저장된 폴더의 경로
  * @return {Promise<Object>} renamedFilePaths와 splitFileOrderMapping을 속성으로 하는 객체를 반환하는 프로미스. renamedFilePaths는 변경된 파일 경로의 배열이며, splitFileOrderMapping은 새 파일 이름과 원본 인덱스의 매핑 정보를 담은 객체.
@@ -98,14 +98,14 @@ async function uploadFiles(files, uploadUrl) {
  */
 const saveMappingDataJsonPostgreSQL = async (desEncryptedFileName, mappingInfo) => {
     try {
-        // FileMappingJson 모델을 사용하여 새 레코드를 생성하고, 데이터베이스에 저장합니다.
+        // FileMappingJson 모델을 사용하여 새 레코드를 생성, 데이터베이스에 저장.
         await FileMappingJson.create({
             encrypted_filename: desEncryptedFileName, // 데이터베이스에 저장될 암호화된 파일명
             mapping_info: mappingInfo // 분할된 파일과 원본 순서 사이의 매핑 정보
         });
         console.log('PostgreSQL에 매핑 데이터가 JSON 형식으로 성공적으로 저장되었습니다.');
     } catch (error) {
-        // 에러 처리: 데이터베이스 저장 과정에서 발생하는 예외를 캐치하고 로그로 출력합니다.
+        // 에러 처리
         console.error('PostgreSQL에 매핑 데이터를 저장하는 도중 오류가 발생했습니다:', error);
     }
 };
