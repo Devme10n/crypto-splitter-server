@@ -69,17 +69,17 @@ function encryptFilename(fileName) {
 
 /**
  * 파일명 변경 (비동기)
- * @description 주어진 경로의 파일명을 암호화된 파일명으로 변경.
+ * @description 주어진 경로의 파일명을 주어진 새 파일명으로 변경합니다.
  * @param {string} filePath 원본 파일 경로
- * @param {string} encryptedFileName 변경할 암호화된 파일명
+ * @param {string} newFileName 변경할 새 파일명
  * @return {string} 변경된 파일의 경로
  */
-async function changeFilename(filePath, encryptedFileName) {
+async function changeFilename(filePath, newFileName) {
     const dirPath = path.dirname(filePath);
-    const encryptedFilePath = path.join(dirPath, encryptedFileName);
-    await fs.rename(filePath, encryptedFilePath);
-    logger.info(`파일명 변경 완료: ${encryptedFilePath}`);
-    return encryptedFilePath;
+    const newFilePath = path.join(dirPath, newFileName);
+    await fs.rename(filePath, newFilePath);
+    logger.info(`파일명 변경 완료: ${newFilePath}`);
+    return newFilePath;
 }
 
 /**
