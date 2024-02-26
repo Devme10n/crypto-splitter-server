@@ -1,7 +1,7 @@
 const path = require('path');
 const { changeFilename, encryptAndSplitFile } = require('./file-processing/writer');
 const { renameFilesAndCreateMapping, uploadFiles, saveMappingDataJsonPostgreSQL } = require('./file-processing/middle');
-const { getFileMappingInfo, sortFiles, mergeFiles } = require('./file-processing/reader');
+const { getFileMappingInfo, sortFiles, mergeFiles, processDecryptedFilename } = require('./file-processing/reader');
 const { compareFileHash } = require('./utils/comparefile');
 
 // 하드코딩
@@ -103,8 +103,12 @@ const afterProcessFiles = async (movedFilePaths) => {
 
     // 하드코딩
     const areFileSame = await compareFileHash("/Users/mac/Documents/split_file/uploadfile/f2ba300a28fa225152c59332cec8e166", mergedFilePath)
+
+    // 12. 파일명 복호화
+    const decryptedFilePath = await processDecryptedFilename(mergedFilePath);
+
   } catch (error) {
-    console.error('파일 매핑 정보 조회 중 오류 발생:', error);
+    console.error('afterProcessFiles error:', error);
   }
 };
 

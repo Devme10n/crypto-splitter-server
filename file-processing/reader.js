@@ -2,10 +2,12 @@ const fs = require('fs').promises;
 const axios = require('axios');
 const path = require('path');
 const splitFile = require('split-file');
+const crypto = require('crypto');
 
 const { logger } = require('../utils/logger');
 const FileMappingJson = require('../models/postgreSQLModels');
 const { isDirectory } = require('../utils/pathUtils');
+const { changeFilename } = require('./writer')
 
 
 //=============================================================================================
@@ -100,18 +102,62 @@ async function mergeFiles(filesPath, outputPath, mergedFileName) {
 }
 
 //---------------------------------------------------------
-// 12. 파일명 복호화 (아직 구현되지 않음)
+// 12. 파일명 복호화
+// 대칭키는 어디에 저장되어 있어야 하는가?
+// 1. 서버 2. db
+// 계정당 발급? 통합으로 1개만 발급?(그나마 얘가 합당하지 않나?)
 //---------------------------------------------------------
-async function decryptFilename(filePath, encryptedFileName) {
+// AES 암호화 설정
+const AES_algorithm = 'aes-192-cbc';
+const AES_password = '비밀번호';
+const AES_key = crypto.scryptSync(AES_password, 'salt', 24);
+const AES_iv = Buffer.alloc(16, 0);
 
+/**
+ * 파일명을 AES 복호화하여 반환
+ * @description 주어진 파일명을 AES 암호화 알고리즘을 사용하여 복호화.
+ * @param {string} encryptedFileName 복호화할 원본 파일명
+ * @return {string} 복호화된 파일명
+ */
+function decryptFilename(encryptedFileName) {
+    const decipher = crypto.createDecipheriv(AES_algorithm, AES_key, AES_iv);
+    let decrypted = decipher.update(encryptedFileName, 'hex', 'utf8');
+    // hex -> utf8 인코딩
+    decrypted += decipher.final('utf8');
+    return decrypted;
 }
+
+/**
+ * 12. 파일명 복호화 및 변경 처리 함수
+ * @description 암호화된 파일명을 복호화하고, 변경된 파일명으로 파일명을 업데이트합니다.
+ * @param {string} encryptedFilePath 처리할 파일의 암호화된 경로
+ * @return {string} 변경된 파일의 경로
+ */
+async function processDecryptedFilename(encryptedFilePath) {
+    const encryptedFileName = path.basename(encryptedFilePath);
+    let decryptedFileName, decryptedFilePath;
+
+    try {
+        decryptedFileName = decryptFilename(encryptedFileName);
+        decryptedFilePath = await changeFilename(encryptedFilePath, decryptedFileName);
+
+        logger.info(`파일 처리 완료: ${decryptedFilePath}`);
+        return decryptedFilePath;
+    } catch (error) {
+        logger.error(`파일 처리 중 오류 발생: ${error.message}`);
+        throw error;
+    }
+}
+
 //---------------------------------------------------------
 // 13. 파일 복호화 (아직 구현되지 않음)
 //---------------------------------------------------------
+
 
 module.exports = {
     getFileMappingInfo,
     sortFiles,
     mergeFiles,
+    processDecryptedFilename
     //... (8~13번 기능의 export)
 };
