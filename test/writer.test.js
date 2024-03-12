@@ -2,6 +2,7 @@ let expect;
 const fs = require('fs').promises;
 const path = require('path');
 const { encryptAndSplitFile, ensureTempDirectory, changeFilename } = require('../file-processing/writer');
+const { compareFileHash } = require('../utils/');
 
 describe('writer.js 테스트', function() {
     const tempTestDir = path.join(__dirname, '..', 'uploadfile');
@@ -45,5 +46,8 @@ describe('writer.js 테스트', function() {
                 expect(true).to.be.false;  // 파일에 접근 불가능하면 테스트 실패
             }
         }
+
+        // 
+        const areFileSame = await compareFileHash("/Users/mac/Documents/split_file/uploadfile/c14b8211d0b37c6a89a1c448c59c028f", "/Users/mac/Documents/split_file/encryptedfile/c14b8211d0b37c6a89a1c448c59c028f")
     });
 });
