@@ -47,11 +47,11 @@ async function ensureTempDirectory() {
 // DES 암호화 사용 X -> AES 암호화 사용(암호화 표준)
 // 호환성 문제를 위해 aes-192-cbc 사용
 //---------------------------------------------------------
-// AES 암호화 설정
-const AES_algorithm = 'aes-192-cbc';
-const AES_password = '비밀번호';
-const AES_key = crypto.scryptSync(AES_password, 'salt', 24);
-const AES_iv = Buffer.alloc(16, 0);
+// AES 암호화 설정 (파일명용)
+const AES_algorithm_filename = 'aes-192-cbc';
+const AES_password_filename = '파일명용비밀번호';
+const AES_key_filename = crypto.scryptSync(AES_password_filename, 'saltForFilename', 24);
+const AES_iv_filename = Buffer.alloc(16, 0); // 초기화 벡터
 
 /**
  * 파일명을 AES 암호화하여 반환
@@ -60,7 +60,7 @@ const AES_iv = Buffer.alloc(16, 0);
  * @return {string} 암호화된 파일명
  */
 function encryptFilename(fileName) {
-    const cipher = crypto.createCipheriv(AES_algorithm, AES_key, AES_iv);
+    const cipher = crypto.createCipheriv(AES_algorithm_filename, AES_key_filename, AES_iv_filename);
     let encrypted = cipher.update(fileName, 'utf8', 'hex');
     // base64 인코딩을 사용하면 파일명에 사용할 수 없는 문자가 포함될 수 있음 -> hex 인코딩 사용
     encrypted += cipher.final('hex');
@@ -115,48 +115,38 @@ async function processFilename(filePath) {
 }
 
 //---------------------------------------------------------
-// 3. 파일 RSA 암호화 (아직 구현되지 않음)
-// "data too large for key size" 오류가 발생
-// 1. 파일을 작은 덩어리로 나누어 각각 암호화하는 방법
-// 2. 대칭 키를 사용하여 파일을 암호화하고 해당 대칭 키를 RSA 공개키로 암호화하는 Hybrid 암호화 방법
-// 합당한 방법을 고려해야함.
+// 3. 파일 암호화
 //---------------------------------------------------------
-// 내장 라이브러리 crypto 대신 외부 라이브러리 사용하기
-//---------------------------------------------------------
-/**
- * RSA 암호화 설정
- * @param {string} inputFilePath 원본 파일 경로
- * @param {number} outputFilePath 암호화된 파일이 저장될 경로
- * @param {number} publicKeyPath 공개키 파일 경로
- * @return {string[]} originalFileNames 원본 파일명 배열
-*/
-async function encryptFile(inputFilePath, outputFilePath, publicKeyPath) {
-    // 공개키 불러오기
-    const publicKey = await fs.readFile(publicKeyPath, 'utf8');
+// 대칭키로 파일 암호화 및 공개키로 대칭키 암호화 함수
+async function encryptFileAndKey(inputFilePath, publicKeyPath) {
+    // 파일용 대칭키 생성 (파일마다 고유)
+    const AES_password_file = crypto.randomBytes(16).toString('hex'); // 안전한 랜덤 비밀번호 생성
+    const AES_key_file = crypto.scryptSync(AES_password_file, 'saltForFile', 32); // 파일용 대칭키 생성
+    const AES_iv_file = Buffer.alloc(16, 0); // 파일용 초기화 벡터 생성
 
-    // 파일 읽기
-    const fileData = await fs.readFile(inputFilePath);
-    console.log(fileData)
-    // 파일 데이터 암호화
-    const encryptedData = crypto.publicEncrypt(
-        {
-            key: publicKey,
-            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-            oaepHash: "sha256",
-        },
-        fileData
-    );
+    try {
+        // 대칭키로 파일 데이터 암호화
+        const fileData = await fs.readFile(inputFilePath);
+        const cipher = crypto.createCipheriv('aes-256-cbc', AES_key_file, AES_iv_file);
+        let encryptedFileData = cipher.update(fileData);
+        encryptedFileData = Buffer.concat([encryptedFileData, cipher.final()]);
+        logger.info('파일 데이터 암호화 성공');
+    } catch (error) {
+        logger.error(`파일 데이터 암호화 중 오류 발생: ${error.message}`);
+        throw error;
+    }
 
-    // 암호화된 데이터를 파일로 저장
-    await fs.writeFile(outputFilePath, encryptedData);
-    console.log('File encrypted.');
+    try {
+        // 공개키로 대칭키 암호화
+        const publicKey = await fs.readFile(publicKeyPath, 'utf8');
+        const encryptedSymmetricKey = crypto.publicEncrypt(publicKey, Buffer.from(AES_password_file));
+        logger.info('대칭키 공개키로 암호화 성공');
+        return encryptedSymmetricKey; // 암호화된 파일 데이터와 대칭키 반환
+    } catch (error) {
+        logger.error(`대칭키 공개키로 암호화 중 오류 발생: ${error.message}`);
+        throw error;
+    }
 }
-
-// 사용 예
-// const inputFilePath = path.join(__dirname, '..', 'uploadfile', 'dummyfile');
-// const outputFilePath = path.join(__dirname, '..', 'uploadfile', 'dummyfile');
-// const publicKeyPath = path.join(__dirname, '..', 'key', 'public_key.pem');
-// encryptFile(inputFilePath, outputFilePath, publicKeyPath);
 
 //---------------------------------------------------------
 // 4. 파일 분할
@@ -211,7 +201,7 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
  *  - {string[]} originalFileNames: 원본 파일명 배열
  *  - {string} splitFilesPath: 조각 파일들이 저장된 폴더 경로
  */
-async function encryptAndSplitFile(originalFilePath, splitCount) {
+async function encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount) {
     try {
         // 임시 디렉토리 설정
         await ensureTempDirectory();
@@ -219,10 +209,13 @@ async function encryptAndSplitFile(originalFilePath, splitCount) {
         // 파일명을 암호화하고 변경
         const encryptedFilePath = await processFilename(originalFilePath);
 
-        // 암호화된 파일 경로를 사용하여 파일을 분할
-        const splitResult = await splitEncryptedFile(encryptedFilePath, splitCount);
+        // 파일을 대칭키로 암호화, 대칭키를 공개키로 암호화
+        const encryptedSymmetricKey = await encryptFileAndKey(encryptedFilePath, publicKeyPath);
 
-        return splitResult;
+        // 암호화된 파일 경로를 사용하여 파일을 분할
+        const { originalFileNames, splitFilesPath } = await splitEncryptedFile(encryptedFilePath, splitCount);
+
+        return { encryptedSymmetricKey, originalFileNames, splitFilesPath };
     } catch (error) {
         logger.error(`파일 처리 및 분할 중 오류 발생: ${error.message}`);
         // 롤백 로직

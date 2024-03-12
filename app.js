@@ -7,6 +7,7 @@ const { compareFileHash } = require('./utils/comparefile');
 // 하드코딩
 const fs = require('fs').promises;
 const newLocation = '/Users/mac/Documents/split_file/internet';
+const publicKeyPath = path.join(__dirname, 'key', 'public_key.pem');
 
 // 업로드 된 파일 위치
 const folderPath = path.join(__dirname, 'uploadfile');
@@ -14,7 +15,7 @@ const folderPath = path.join(__dirname, 'uploadfile');
 const processFiles = async () => {
   try {
     // 암호화된 dummyfile 파일명 초기화
-    const desEncryptedFilePath = path.join(folderPath, 'f2ba300a28fa225152c59332cec8e166');
+    const desEncryptedFilePath = path.join(folderPath, 'c14b8211d0b37c6a89a1c448c59c028f');
     changeFilename(desEncryptedFilePath, 'dummyfile')
     console.log('dummyfile로 파일명 변경 완료')
 
@@ -23,7 +24,7 @@ const processFiles = async () => {
     const splitCount = 100; // 예시 분할 조각 수
 
     // 파일 암호화 및 분할 실행
-    const { originalFileNames, splitFilesPath } = await encryptAndSplitFile(originalFilePath, splitCount);
+    const { encryptedSymmetricKey, originalFileNames, splitFilesPath } = await encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount);
     console.log('파일이 성공적으로 암호화되고 분할되었습니다.');
 
     // 파일 이름 변경 및 매핑 생성
@@ -71,9 +72,7 @@ const processFiles = async () => {
 
     
     // 업로드 후 매핑 데이터 저장
-    await saveMappingDataJsonPostgreSQL(desEncryptedFileName, splitFileOrderMapping);
-    // 아래 console.log는 실패해도 성공했다고 함.
-    //console.log('매핑 데이터가 성공적으로 저장되었습니다.');
+    await saveMappingDataJsonPostgreSQL(desEncryptedFileName, splitFileOrderMapping, encryptedSymmetricKey);
 
     // 하드 코딩
     return movedFilePaths;
@@ -88,7 +87,7 @@ const afterProcessFiles = async (movedFilePaths) => {
   try {
     // getFileMappingInfo 함수 실행
     // 하드 코딩
-    const encryptedFilename = 'f2ba300a28fa225152c59332cec8e166'; // 사용자가 입력한 파일명을 대칭키로 암호화
+    const encryptedFilename = 'c14b8211d0b37c6a89a1c448c59c028f'; // 사용자가 입력한 파일명을 대칭키로 암호화
     const db_mappingInfo = await getFileMappingInfo(encryptedFilename);
     // console.log('파일 매핑 정보:', db_mappingInfo);
 
@@ -102,7 +101,7 @@ const afterProcessFiles = async (movedFilePaths) => {
     // console.log(folderPath)
 
     // 하드코딩
-    const areFileSame = await compareFileHash("/Users/mac/Documents/split_file/uploadfile/f2ba300a28fa225152c59332cec8e166", mergedFilePath)
+    const areFileSame = await compareFileHash("/Users/mac/Documents/split_file/uploadfile/c14b8211d0b37c6a89a1c448c59c028f", mergedFilePath)
 
     // 12. 파일명 복호화
     const decryptedFilePath = await processDecryptedFilename(mergedFilePath);
