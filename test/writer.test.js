@@ -6,6 +6,7 @@ const { encryptAndSplitFile, ensureTempDirectory, changeFilename } = require('..
 describe('writer.js 테스트', function() {
     const tempTestDir = path.join(__dirname, '..', 'uploadfile');
     const dummyFilePath = path.join(tempTestDir, 'dummyfile');
+    const publicKeyPath = path.join(__dirname, '..', 'key', 'public_key.pem');
     const splitCount = 100; // 분할 개수, 테스트 용도로 임의 설정
 
     before(async function() {
@@ -23,13 +24,13 @@ describe('writer.js 테스트', function() {
         // await deleteFolderAndFiles(path.join(__dirname, '..', 'temp'));
 
         // 암호화된 파일명을 원래의 파일명(dummyfile)으로 변경
-        const encryptedFilePath = path.join(__dirname, '..', 'uploadfile', 'f2ba300a28fa225152c59332cec8e166');
-        await changeFilename(encryptedFilePath, 'dummyfile');
+        // const encryptedFilePath = path.join(__dirname, '..', 'uploadfile', 'c14b8211d0b37c6a89a1c448c59c028f');
+        // await changeFilename(encryptedFilePath, 'dummyfile');
     });
 
     it('파일명을 암호화하고 파일을 올바르게 분할해야 함', async function() {
         // encryptAndSplitFile 함수를 호출하여 파일명 암호화 및 분할 수행
-        const { originalFileNames, splitFilesPath } = await encryptAndSplitFile(dummyFilePath, splitCount);
+        const { originalFileNames, splitFilesPath } = await encryptAndSplitFile(dummyFilePath, publicKeyPath, splitCount);
 
         // 분할된 파일의 개수가 예상과 일치하는지 확인
         expect(originalFileNames.length).to.equal(splitCount);
