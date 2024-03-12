@@ -1,7 +1,10 @@
 const splitFile = require('split-file');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsp = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const { pipeline } = require('stream/promises');
+
 const { logger } = require('../utils/logger');
 const { deleteFolderAndFiles } = require('../utils/rollbackUtils');
 
@@ -15,10 +18,10 @@ const tempPath = path.join(__dirname, '..', 'temp');
 async function ensureTempDirectory() {
     try {
         // 디렉토리 존재 여부 확인
-        await fs.access(tempPath);
+        await fsp.access(tempPath);
 
         // 디렉토리가 존재하면 삭제
-        await fs.rm(tempPath, { recursive: true });
+        await fsp.rm(tempPath, { recursive: true });
         logger.info(`임시 디렉토리 삭제됨: ${tempPath}`);
     } catch (error) {
         if (error.code !== 'ENOENT') {
@@ -30,7 +33,7 @@ async function ensureTempDirectory() {
     }
     try {
         // 임시 디렉토리 생성
-        await fs.mkdir(tempPath);
+        await fsp.mkdir(tempPath);
         logger.info(`임시 디렉토리 생성됨: ${tempPath}`);
     } catch (error) {
         logger.error(`임시 디렉토리 처리 중 오류 발생: ${error.message}`);
@@ -77,7 +80,7 @@ function encryptFilename(fileName) {
 async function changeFilename(filePath, newFileName) {
     const dirPath = path.dirname(filePath);
     const newFilePath = path.join(dirPath, newFileName);
-    await fs.rename(filePath, newFilePath);
+    await fsp.rename(filePath, newFilePath);
     logger.info(`파일명 변경 완료: ${newFilePath}`);
     return newFilePath;
 }
@@ -117,20 +120,30 @@ async function processFilename(filePath) {
 //---------------------------------------------------------
 // 3. 파일 암호화
 //---------------------------------------------------------
+
 // 대칭키로 파일 암호화 및 공개키로 대칭키 암호화 함수
 async function encryptFileAndKey(inputFilePath, publicKeyPath) {
     // 파일용 대칭키 생성 (파일마다 고유)
     const AES_password_file = crypto.randomBytes(16).toString('hex'); // 안전한 랜덤 비밀번호 생성
     const AES_key_file = crypto.scryptSync(AES_password_file, 'saltForFile', 32); // 파일용 대칭키 생성
     const AES_iv_file = Buffer.alloc(16, 0); // 파일용 초기화 벡터 생성
-
+    
+    const outputFilePath = inputFilePath.replace('/uploadfile/', '/encryptedfile/');
     try {
-        // 대칭키로 파일 데이터 암호화
-        const fileData = await fs.readFile(inputFilePath);
+        // 스트림을 사용하여 파일 데이터 암호화
+        const readStream = fs.createReadStream(inputFilePath);
+        const writeStream = fs.createWriteStream(outputFilePath);
         const cipher = crypto.createCipheriv('aes-256-cbc', AES_key_file, AES_iv_file);
-        let encryptedFileData = cipher.update(fileData);
-        encryptedFileData = Buffer.concat([encryptedFileData, cipher.final()]);
-        logger.info('파일 데이터 암호화 성공');
+
+        await pipeline(readStream, cipher, writeStream);
+
+        logger.info(`파일 데이터 암호화 성공: ${outputFilePath}`);
+
+        /**
+        * 테스트를 위해 주석처리
+        */
+        // // 정상적으로 암호화된 파일이 생성되었으므로 원본 파일 삭제
+        // await deleteFolderAndFiles(inputFilePath);
     } catch (error) {
         logger.error(`파일 데이터 암호화 중 오류 발생: ${error.message}`);
         throw error;
@@ -138,10 +151,10 @@ async function encryptFileAndKey(inputFilePath, publicKeyPath) {
 
     try {
         // 공개키로 대칭키 암호화
-        const publicKey = await fs.readFile(publicKeyPath, 'utf8');
+        const publicKey = await fsp.readFile(publicKeyPath, 'utf8');
         const encryptedSymmetricKey = crypto.publicEncrypt(publicKey, Buffer.from(AES_password_file));
         logger.info('대칭키 공개키로 암호화 성공');
-        return encryptedSymmetricKey; // 암호화된 파일 데이터와 대칭키 반환
+        return { outputFilePath, encryptedSymmetricKey }; // 암호화된 파일 데이터 경로와 암호화된 대칭키 반환
     } catch (error) {
         logger.error(`대칭키 공개키로 암호화 중 오류 발생: ${error.message}`);
         throw error;
@@ -170,9 +183,9 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
         splitFilesPath = path.join(process.cwd(), 'temp', encryptedFileName);
 
         // 디렉토리 존재 여부 확인 및 생성
-        const dirExists = await fs.access(splitFilesPath).then(() => true).catch(() => false);
+        const dirExists = await fsp.access(splitFilesPath).then(() => true).catch(() => false);
         if (!dirExists) {
-            await fs.mkdir(splitFilesPath, { recursive: true });
+            await fsp.mkdir(splitFilesPath, { recursive: true });
         }
 
         const originalFileNames = await splitFile.splitFile(encryptedFilePath, splitCount, splitFilesPath);
@@ -210,10 +223,10 @@ async function encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount) 
         const encryptedFilePath = await processFilename(originalFilePath);
 
         // 파일을 대칭키로 암호화, 대칭키를 공개키로 암호화
-        const encryptedSymmetricKey = await encryptFileAndKey(encryptedFilePath, publicKeyPath);
+        const { outputFilePath, encryptedSymmetricKey } = await encryptFileAndKey(encryptedFilePath, publicKeyPath);
 
         // 암호화된 파일 경로를 사용하여 파일을 분할
-        const { originalFileNames, splitFilesPath } = await splitEncryptedFile(encryptedFilePath, splitCount);
+        const { originalFileNames, splitFilesPath } = await splitEncryptedFile(outputFilePath, splitCount);
 
         return { encryptedSymmetricKey, originalFileNames, splitFilesPath };
     } catch (error) {

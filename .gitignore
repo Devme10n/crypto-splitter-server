@@ -181,3 +181,4 @@ dist
 TestDB/middle_db.js
 TestDB/mongoDBModels.js
 internet
+encryptedfile/*
