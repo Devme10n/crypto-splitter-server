@@ -180,5 +180,9 @@ dist
 # End of https://www.toptal.com/developers/gitignore/api/macos,node
 TestDB/middle_db.js
 TestDB/mongoDBModels.js
-internet
+uploadfile/*
+internet/*
 encryptedfile/*
+output/*
+result/*
+Target File
