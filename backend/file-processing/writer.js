@@ -192,7 +192,7 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
     try {
         // 암호화된 파일명으로 폴더 및 파일 분할 작업 수행
         const encryptedFileName = path.basename(encryptedFilePath); // 암호화된 파일명 추출
-        splitFilesPath = path.join(process.cwd(), 'temp', encryptedFileName);
+        splitFilesPath = path.join(__dirname, '..', 'temp', encryptedFileName);
 
         // 디렉토리 존재 여부 확인 및 생성
         const dirExists = await fsp.access(splitFilesPath).then(() => true).catch(() => false);

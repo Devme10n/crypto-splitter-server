@@ -43,7 +43,7 @@ const processFiles = async () => {
 
     // 하드코딩
     const fsp = require('fs').promises;
-    const newLocation = '/Users/mac/Documents/split_file/internet';
+    const newLocation = path.join(__dirname, 'internet');
 
     const moveFilesToNewLocation = async (filePaths, newLocation) => {
       const movedFilePaths = [];
@@ -93,11 +93,11 @@ const afterProcessFiles = async (movedFilePaths) => {
     // 비교하려는 파일 경로들
     const filesToCompare = [
       // '/Users/mac/Documents/split_file/uploadfile/0be8366e87a3f33ae2d2ebb5fa9bfb21',
-      '/Users/mac/Documents/split_file/result/dummyfile.mp4',
+      '/Users/mac/Documents/split_file/backend/result/dummyfile.mp4',
       // '/Users/mac/Documents/split_file/encryptedfile/0be8366e87a3f33ae2d2ebb5fa9bfb21',
       // '/Users/mac/Documents/split_file/output/0be8366e87a3f33ae2d2ebb5fa9bfb21',
-      '/Users/mac/Documents/split_file/dummyfile.mp4'
-    ];
+      '/Users/mac/Documents/split_file/backend/dummyfile.mp4'
+        ];
 
     // 파일 비교 시작
     compareMultipleFiles(filesToCompare);

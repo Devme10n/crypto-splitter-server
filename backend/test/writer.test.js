@@ -1,7 +1,7 @@
 let expect;
 const fs = require('fs').promises;
 const path = require('path');
-const { encryptAndSplitFile, ensureTempDirectory, changeFilename } = require('../file-processing/writer');
+const { encryptAndSplitFile, ensureDirectories, changeFilename } = require('../file-processing/writer');
 const { compareFileHash } = require('../utils/');
 
 describe('writer.js 테스트', function() {
@@ -16,7 +16,7 @@ describe('writer.js 테스트', function() {
         expect = chaiModule.expect;
 
         // 설정: 임시 디렉토리 생성
-        await ensureTempDirectory();
+        await ensureDirectories();
     });
 
     after(async function() {
@@ -48,6 +48,6 @@ describe('writer.js 테스트', function() {
         }
 
         // 
-        const areFileSame = await compareFileHash("/Users/mac/Documents/split_file/uploadfile/c14b8211d0b37c6a89a1c448c59c028f", "/Users/mac/Documents/split_file/encryptedfile/c14b8211d0b37c6a89a1c448c59c028f")
+        const areFileSame = await compareFileHash("/Users/mac/Documents/split_file/backend/uploadfile/c14b8211d0b37c6a89a1c448c59c028f", "/Users/mac/Documents/split_file/backend/encryptedfile/c14b8211d0b37c6a89a1c448c59c028f")
     });
 });

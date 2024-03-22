@@ -304,7 +304,7 @@ async function mergeAndDecryptFile(encryptedFilename, movedFilePaths){
     const db_mappingInfo = await useMappingInfo(encryptedFilename);
 
     // 하드코딩
-    const outputPath = '/Users/mac/Documents/split_file/output';
+    const outputPath = path.resolve(__dirname, '../output');
 
     // 10. 파일 정렬
     const sortedFilePaths = await sortFilesByMappingInfo(movedFilePaths, db_mappingInfo);
@@ -316,7 +316,7 @@ async function mergeAndDecryptFile(encryptedFilename, movedFilePaths){
 
     // compareFileHash(mergedFilePath, "/Users/mac/Documents/split_file/encryptedfile/0be8366e87a3f33ae2d2ebb5fa9bfb21")
 
-    const privateKeyPath = "/Users/mac/Documents/split_file/key/private_key.pem"
+    const privateKeyPath = path.resolve(__dirname, '../key/private_key.pem');
     const decryptedPassword = await decryptSymmetricKey(encryptedPassword, privateKeyPath)
 
     const decryptedFilePath = mergedFilePath.replace('/output/', '/result/');
