@@ -257,46 +257,43 @@ async function decryptSymmetricKey(encryptedPassword, privateKeyPath) {
  */
 async function decryptFileWithSymmetricKey(encryptedFilePath, decryptedFilePath, decryptedPassword) {
     return new Promise(async (resolve, reject) => {
-
-        // del
-        logger.info(`Decrypting file: ${encryptedFilePath}`);
-
-        const AES_password_file = decryptedPassword.toString('hex')
-        AES_password_file.split(' ').join('').split('\n').join('').split('\r').join('');
+        let AES_password_file = decryptedPassword.toString('hex')
+        AES_password_file = AES_password_file.split(' ').join('').split('\n').join('').split('\r').join('');
         const AES_key_file = crypto.scryptSync(AES_password_file, 'saltForFile', 32); // 복호화된 AES_password로부터 AES_key 생성
-        const AES_iv_file = Buffer.alloc(16, 0); // 파일 복호화를 위한 초기화 벡터
-        
-        try {
-            // 읽기, 복호화, 쓰기를 위한 스트림 생성
-            const readStream = fs.createReadStream(encryptedFilePath);
-            const writeStream = fs.createWriteStream(decryptedFilePath);
-            const decipher = crypto.createDecipheriv('aes-256-cbc', AES_key_file, AES_iv_file);
-            
-            // 스트림 파이프 연결
-            readStream.pipe(decipher).pipe(writeStream);
 
-            // 스트림들에 대한 에러 핸들링
-            const errorHandler = (source) => (err) => {
-                readStream.close();
-                writeStream.close();
-                reject(`파일 복호화 도중 에러 발생 ${source}: ${err}`);
-            };
+        // 읽기, 복호화, 쓰기를 위한 스트림 생성
+        const readStream = fs.createReadStream(encryptedFilePath);
+        const writeStream = fs.createWriteStream(decryptedFilePath);
 
-            readStream.on('error', errorHandler('Read Stream'));
-            writeStream.on('error', errorHandler('Write Stream'));
-            decipher.on('error', errorHandler('Decipher Stream'));
+        let AES_iv_file;
+        let decipher;
 
-            // writeStream의 'finish' 이벤트 처리
-            writeStream.on('finish', () => {
-                logger.info(`파일 복호화 성공: ${decryptedFilePath}`);
-                
-                // 정상적으로 복호화된 파일이 생성되었으므로 원본 파일 삭제
-                deleteFolderAndFiles(encryptedFilePath);
-                resolve();
-            });
-        } catch (error) {
-            reject(`파일 복호화 실패: ${encryptedFilePath}`, error);
-        }
+        readStream.on('data', (chunk) => {
+            if (!AES_iv_file) {
+                // 첫 번째 청크에서 IV를 읽음
+                AES_iv_file = chunk.slice(0, 16); // IV는 청크의 처음 16바이트
+                decipher = crypto.createDecipheriv('aes-256-cbc', AES_key_file, AES_iv_file);
+
+                // 나머지 데이터를 복호화
+                writeStream.write(decipher.update(chunk.slice(16)));
+                logger.info(`IV를 읽고 데이터 복호화 시작: ${encryptedFilePath}`);
+            } else {
+                writeStream.write(decipher.update(chunk));
+            }
+        });
+
+        readStream.on('end', () => {
+            writeStream.write(decipher.final());
+            logger.info(`파일 데이터 복호화 완료: ${decryptedFilePath}`);
+            // 정상적으로 복호화된 파일이 생성되었으므로 원본 파일 삭제
+            deleteFolderAndFiles(encryptedFilePath);
+            resolve();
+        });
+
+        readStream.on('error', (err) => {
+            logger.error(`파일 데이터 복호화 실패: ${encryptedFilePath}`, err);
+            reject(err);
+        });
     });
 }
 

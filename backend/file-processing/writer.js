@@ -125,13 +125,12 @@ async function processFilename(filePath) {
 //---------------------------------------------------------
 // 3. 파일 암호화
 //---------------------------------------------------------
-
 // 대칭키로 파일 암호화 및 공개키로 대칭키 암호화 함수
 async function encryptFileAndKey(inputFilePath, publicKeyPath) {
     // 파일용 대칭키 생성 (파일마다 고유)
     const AES_password_file = crypto.randomBytes(16).toString('hex'); // 안전한 랜덤 비밀번호 생성
     const AES_key_file = crypto.scryptSync(AES_password_file, 'saltForFile', 32); // 파일용 대칭키 생성
-    const AES_iv_file = Buffer.alloc(16, 0); // 파일용 초기화 벡터 생성
+    const AES_iv_file = crypto.randomBytes(16); // 파일용 초기화 벡터 생성
     
     const outputFilePath = inputFilePath.replace('/uploadfile/', '/encryptedfile/');
     try {
@@ -140,6 +139,8 @@ async function encryptFileAndKey(inputFilePath, publicKeyPath) {
         const writeStream = fs.createWriteStream(outputFilePath);
         const cipher = crypto.createCipheriv('aes-256-cbc', AES_key_file, AES_iv_file);
 
+        // IV를 파일 앞에 붙임
+        writeStream.write(AES_iv_file);
         readStream.pipe(cipher).pipe(writeStream);
 
         await finished(writeStream);
