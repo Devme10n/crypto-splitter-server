@@ -17,7 +17,7 @@ const FileMappingJson = sequelize.define('file_mapping_json', {
         allowNull: false
     },
     encrypted_symmetric_key: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: false
     }
 });
