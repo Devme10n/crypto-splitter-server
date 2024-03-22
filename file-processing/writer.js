@@ -3,41 +3,48 @@ const fs = require('fs');
 const fsp = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
-const { pipeline } = require('stream/promises');
+
+const { promisify } = require('util');
+const finished = promisify(require('stream').finished);
 
 const { logger } = require('../utils/logger');
 const { deleteFolderAndFiles } = require('../utils/rollbackUtils');
 
-
 const tempPath = path.join(__dirname, '..', 'temp');
+const internetPath = path.join(__dirname, '..', 'internet');
+const outputPath = path.join(__dirname, '..', 'output');
+const resultPath = path.join(__dirname, '..', 'result');
+const encryptedfilePath = path.join(__dirname, '..', 'encryptedfile');
 
 /**
  * 임시 디렉토리 확인 및 생성
  * @description temp 폴더가 존재하지 않으면 생성. 이미 존재하는 경우, 내용을 비우고 다시 생성.
  */
-async function ensureTempDirectory() {
-    try {
-        // 디렉토리 존재 여부 확인
-        await fsp.access(tempPath);
+async function ensureDirectories(...paths) {
+    for (const tempPath of paths) {
+        try {
+            // 디렉토리 존재 여부 확인
+            await fsp.access(tempPath);
 
-        // 디렉토리가 존재하면 삭제
-        await fsp.rm(tempPath, { recursive: true });
-        logger.info(`임시 디렉토리 삭제됨: ${tempPath}`);
-    } catch (error) {
-        if (error.code !== 'ENOENT') {
-            // ENOENT 이외의 오류는 예상하지 못한 오류이므로, 로그를 남기고 예외를 다시 던짐
-            logger.error(`임시 디렉토리 확인 중 오류 발생: ${error.message}`);
+            // 디렉토리가 존재하면 삭제
+            await fsp.rm(tempPath, { recursive: true });
+            logger.info(`임시 디렉토리 삭제됨: ${tempPath}`);
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                // ENOENT 이외의 오류는 예상하지 못한 오류이므로, 로그를 남기고 예외를 다시 던짐
+                logger.error(`임시 디렉토리 확인 중 오류 발생: ${error.message}`);
+                throw error;
+            }
+            // ENOENT 오류는 디렉토리가 존재하지 않을 때 발생하는 정상적인 오류 (무시)
+        }
+        try {
+            // 임시 디렉토리 생성
+            await fsp.mkdir(tempPath);
+            logger.info(`임시 디렉토리 생성됨: ${tempPath}`);
+        } catch (error) {
+            logger.error(`임시 디렉토리 처리 중 오류 발생: ${error.message}`);
             throw error;
         }
-        // ENOENT 오류는 디렉토리가 존재하지 않을 때 발생하는 정상적인 오류 (무시)
-    }
-    try {
-        // 임시 디렉토리 생성
-        await fsp.mkdir(tempPath);
-        logger.info(`임시 디렉토리 생성됨: ${tempPath}`);
-    } catch (error) {
-        logger.error(`임시 디렉토리 처리 중 오류 발생: ${error.message}`);
-        throw error;
     }
 }
 
@@ -48,7 +55,6 @@ async function ensureTempDirectory() {
 //---------------------------------------------------------
 // 2. 파일명 AES 암호화
 // DES 암호화 사용 X -> AES 암호화 사용(암호화 표준)
-// 호환성 문제를 위해 aes-192-cbc 사용
 //---------------------------------------------------------
 // AES 암호화 설정 (파일명용)
 const AES_algorithm_filename = 'aes-192-cbc';
@@ -81,7 +87,6 @@ async function changeFilename(filePath, newFileName) {
     const dirPath = path.dirname(filePath);
     const newFilePath = path.join(dirPath, newFileName);
     await fsp.rename(filePath, newFilePath);
-    logger.info(`파일명 변경 완료: ${newFilePath}`);
     return newFilePath;
 }
 
@@ -97,17 +102,17 @@ async function processFilename(filePath) {
 
     try {
         encryptedFileName = encryptFilename(originalFileName);
-        encryptedFilePath = await changeFilename(filePath, encryptedFileName);
+        encryptedFilePath = changeFilename(filePath, encryptedFileName);
 
-        logger.info(`파일 처리 완료: ${encryptedFilePath}`);
+        logger.info(`파일명 암호화 완료: ${encryptedFilePath}`);
         return encryptedFilePath; // 성공 결과 반환
     } catch (error) {
-        logger.error(`파일 처리 중 오류 발생: ${error.message}`);
+        logger.error(`파일명 암호화 중 오류 발생: ${error.message}`);
 
         // 롤백 로직: encryptedFilePath가 설정되었으나 에러가 발생했을 경우 원래 파일명으로 복구
         if (encryptedFilePath) {
             try {
-                await changeFilename(encryptedFilePath, originalFileName);
+                changeFilename(encryptedFilePath, originalFileName);
                 logger.info('롤백 완료: 원래 파일명으로 복구');
             } catch (rollbackError) {
                 logger.error(`롤백 실패: ${rollbackError.message}`);
@@ -135,15 +140,14 @@ async function encryptFileAndKey(inputFilePath, publicKeyPath) {
         const writeStream = fs.createWriteStream(outputFilePath);
         const cipher = crypto.createCipheriv('aes-256-cbc', AES_key_file, AES_iv_file);
 
-        await pipeline(readStream, cipher, writeStream);
+        readStream.pipe(cipher).pipe(writeStream);
+
+        await finished(writeStream);
 
         logger.info(`파일 데이터 암호화 성공: ${outputFilePath}`);
 
-        /**
-        * 테스트를 위해 주석처리
-        */
-        // // 정상적으로 암호화된 파일이 생성되었으므로 원본 파일 삭제
-        // await deleteFolderAndFiles(inputFilePath);
+        // 정상적으로 암호화된 파일이 생성되었으므로 원본 파일 삭제
+        await deleteFolderAndFiles(inputFilePath);
     } catch (error) {
         logger.error(`파일 데이터 암호화 중 오류 발생: ${error.message}`);
         throw error;
@@ -152,9 +156,17 @@ async function encryptFileAndKey(inputFilePath, publicKeyPath) {
     try {
         // 공개키로 대칭키 암호화
         const publicKey = await fsp.readFile(publicKeyPath, 'utf8');
-        const encryptedSymmetricKey = crypto.publicEncrypt(publicKey, Buffer.from(AES_password_file));
+        const encryptedPassword = crypto.publicEncrypt(
+            {
+                key: publicKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: "sha256",
+            },
+            Buffer.from(AES_password_file, 'hex')
+        );
         logger.info('대칭키 공개키로 암호화 성공');
-        return { outputFilePath, encryptedSymmetricKey }; // 암호화된 파일 데이터 경로와 암호화된 대칭키 반환
+
+        return { outputFilePath, encryptedPassword }; // 암호화된 파일 데이터 경로와 암호화된 대칭키 반환
     } catch (error) {
         logger.error(`대칭키 공개키로 암호화 중 오류 발생: ${error.message}`);
         throw error;
@@ -189,7 +201,8 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
         }
 
         const originalFileNames = await splitFile.splitFile(encryptedFilePath, splitCount, splitFilesPath);
-        logger.info('파일 분할 완료');
+        logger.info(`파일 분할 완료: ${splitFilesPath}`);
+        await deleteFolderAndFiles(encryptedFilePath);
         return { originalFileNames, splitFilesPath };
     } catch(err) {
         logger.error(`파일 분할 중 오류 발생: ${err.message}`);
@@ -217,18 +230,18 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
 async function encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount) {
     try {
         // 임시 디렉토리 설정
-        await ensureTempDirectory();
+        await ensureDirectories(tempPath, internetPath, outputPath, resultPath, encryptedfilePath);
 
         // 파일명을 암호화하고 변경
         const encryptedFilePath = await processFilename(originalFilePath);
 
         // 파일을 대칭키로 암호화, 대칭키를 공개키로 암호화
-        const { outputFilePath, encryptedSymmetricKey } = await encryptFileAndKey(encryptedFilePath, publicKeyPath);
+        const { outputFilePath, encryptedPassword } = await encryptFileAndKey(encryptedFilePath, publicKeyPath);
 
         // 암호화된 파일 경로를 사용하여 파일을 분할
         const { originalFileNames, splitFilesPath } = await splitEncryptedFile(outputFilePath, splitCount);
 
-        return { encryptedSymmetricKey, originalFileNames, splitFilesPath };
+        return { encryptedPassword, originalFileNames, splitFilesPath };
     } catch (error) {
         logger.error(`파일 처리 및 분할 중 오류 발생: ${error.message}`);
         // 롤백 로직
@@ -238,7 +251,7 @@ async function encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount) 
 
 
 module.exports = {
-    ensureTempDirectory,
+    ensureDirectories,
     changeFilename,
     processFilename,
     splitEncryptedFile,
