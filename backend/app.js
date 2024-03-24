@@ -1,81 +1,105 @@
-const path = require('path');
-
-const { changeFilename, encryptAndSplitFile } = require('./file-processing/writer');
-const { renameFilesAndCreateMapping, uploadFiles, saveMappingDataJsonPostgreSQL } = require('./file-processing/middle');
+const { ensureDirectories, encryptAndSplitFile, processEncryptedFileAndPassphrase } = require('./file-processing/writer');
+const { renameFilesAndCreateMapping, uploadFiles, saveMappingDataJsonPostgreSQL, manageFileUploadAndMapping } = require('./file-processing/middle');
 const { mergeAndDecryptFile } = require('./file-processing/reader');
 const { calculateFileHash, compareFileHash, compareMultipleFiles } = require('./utils/hashFunctions');
 
-const publicKeyPath = path.join(__dirname, 'key', 'public_key.pem');
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const { log } = require('console');
+const { logger } = require('./utils/logger');
+require('dotenv').config();
 
-// 업로드 된 파일 위치
-const folderPath = path.join(__dirname, 'uploadfile');
+const app = express();
+app.use(cors());
 
-const processFiles = async () => {
+// 애플리케이션 초기화 코드
+(async () => {
+  const tempPath = path.join(__dirname, '.', 'temp');
+  const uploadfilePath = path.join(__dirname, '.', 'uploadfile');
+  const outputPath = path.join(__dirname, '.', 'output');
+  const resultPath = path.join(__dirname, '.', 'result');
+  const encryptedfilePath = path.join(__dirname, '.', 'encryptedfile');
+
+  // 임시 디렉토리 설정 (프로그램 실행 시 최초 1회만 실행)
+  await ensureDirectories(tempPath, uploadfilePath, outputPath, resultPath, encryptedfilePath);
+})();
+
+// multer 설정
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, 'uploadfile/');
+    },
+    filename: function (req, file, cb) {
+      cb(null, file.originalname);
+    }
+  }),
+});
+
+// 암호화된 파일과 passphrase를 수신하는 POST 요청 처리
+app.post('/upload', upload.any(), async (req, res) => {
   try {
-    // 원본 파일 경로와 분할할 조각 수 설정
-    const originalFilePath = path.join(folderPath, 'dummyfile.mp4');
-    const splitCount = 100; // 예시 분할 조각 수
+    // console.log('req.files:', req.files);
+    // console.log('req.body:', req.body);
+    // console.log('req.body[encryptedPassphrase]:', req.body['encryptedPassphrase']);
+    // console.log('req.files[0].path:', req.files[0].path);
 
-    // 파일 암호화 및 분할 실행
-    const { encryptedPassword, originalFileNames, splitFilesPath } = await encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount);
-    // console.log('파일이 성공적으로 암호화되고 분할되었습니다.');
+    const encryptedPassphrase = req.body['encryptedPassphrase'];
+    const encryptedFilePath = req.files[0].path;
+    if (!encryptedPassphrase || !encryptedFilePath) {
+      return res.status(400).send('No file was uploaded.');
+    }
 
-    // 파일 이름 변경 및 매핑 생성
-    const { renamedFilePaths, splitFileOrderMapping, desEncryptedFileName } = await renameFilesAndCreateMapping(originalFileNames, splitFilesPath);
-    // console.log('파일 이름 변경 및 매핑 정보 생성 완료.');
+    // console.log('encryptedPassphrase:', encryptedPassphrase);
+    // console.log('encryptedFilePath:', encryptedFilePath);
 
-    //---------------------------------------------------------
-    // File Upload
-    //---------------------------------------------------------
-    // // 파일 업로드
-    // const uploadUrl = 'http://localhost:3000/upload'; // 업로드할 URL 예시
-    // await uploadFiles(renamedFilePaths, uploadUrl);
-    // console.log('파일 업로드가 완료되었습니다.');
+    // processFiles 함수 호출
+    await processFiles(encryptedFilePath, encryptedPassphrase);
 
-    //---------------------------------------------------------
-    // File Move
-    //---------------------------------------------------------
-    /**
-     * 주어진 파일 경로 목록의 파일들을 새 위치로 이동.
-     * @param {string[]} filePaths - 이동할 파일들의 경로.
-     * @param {string} newLocation - 파일들을 이동할 새 위치.
-     */
+    res.status(200).send('File and passphrase successfully uploaded.');
+  } catch (err) {
+    console.error(`File upload failed with error: ${err.message}`);
+    res.status(500).send(`File upload failed with error: ${err.message}`);
+  }
+});
 
-    // 하드코딩
-    const fsp = require('fs').promises;
-    const newLocation = path.join(__dirname, 'internet');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 
-    const moveFilesToNewLocation = async (filePaths, newLocation) => {
-      const movedFilePaths = [];
-      try {
-          // parentFolderPath: 모든 파일의 상위 폴더
-          const parentFolderPath = path.dirname(filePaths[0]);
+/**
+ * TODO: 하드코딩된 것들
+ * 2. splitCount - 분할할 조각 수 -> FIXME: dotenv
+ * 4. encryptedFilename - 사용자가 입력한 파일명을 대칭키로 암호화 -> FIXME: react에서 원본 파일명을 받아와서 암호화할 것.
+ * 5. filesToCompare - 비교하려는 파일 경로들 -> FIXME: 다른 방법으로 파일 경로를 받아올 것.
+ */
 
-          // 새 위치에 상위 폴더를 생성.
-          const newParentFolderPath = path.join(newLocation, path.basename(parentFolderPath));
-          await fsp.mkdir(newParentFolderPath, { recursive: true });
+// TODO: 사용자가 업로드한 publicKey 파일 경로를 받아오도록 수정
+const publicKeyPath = path.join(__dirname, 'key', 'public_key.pem'); // FIXME: 삭제 예정
 
-          for (const filePath of filePaths) {
-              const fileName = path.basename(filePath);
-              const newFilePath = path.join(newParentFolderPath, fileName);
-              await fsp.rename(filePath, newFilePath);
-              movedFilePaths.push(newFilePath); // 배열에 이동된 파일 경로 추가
-          }
-          return movedFilePaths; // 이동된 파일 경로들의 배열 반환
-      } catch (error) {
-          console.error('파일을 이동하는 도중 오류 발생:', error);
-      }
-    };
-  
-    const movedFilePaths = await moveFilesToNewLocation(renamedFilePaths, newLocation);
-    //
+const processFiles = async (originalFilePath, encryptedPassphrase) => {
+  try {
+    // 분할할 조각 수 설정
+    const splitCount = 100;
 
-    // 업로드 후 매핑 데이터 저장
-    await saveMappingDataJsonPostgreSQL(desEncryptedFileName, splitFileOrderMapping, encryptedPassword);
+    let encryptedPassword, originalFileNames, splitFilesPath;
 
-    // 하드 코딩
-    return movedFilePaths;
-
+    // Client-side와 Server-side를 구분
+    // passphrase가 제공되었는지 확인
+    if (encryptedPassphrase) {
+      // 암호화된 파일과 passphrase를 처리
+      ({ encryptedPassword, originalFileNames, splitFilesPath } = await processEncryptedFileAndPassphrase(originalFilePath, encryptedPassphrase, splitCount));
+    } else {
+      // 원본 파일을 암호화
+      ({ encryptedPassword, originalFileNames, splitFilesPath } = await encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount));
+    }
+    
+    // middle.js의 최종 함수
+    await manageFileUploadAndMapping(originalFileNames, splitFilesPath, process.env.UPLOAD_URL, encryptedPassphrase);
+    logger.info(`파일 처리 완료`);
 
   } catch (error) {
     console.error('파일 처리 중 오류가 발생했습니다:', error);
@@ -107,8 +131,8 @@ const afterProcessFiles = async (movedFilePaths) => {
   }
 };
 
-processFiles()
-  .then(movedFilePaths => afterProcessFiles(movedFilePaths))
-  .catch(error => {
-    console.error('오류 발생:', error);
-  });
+// processFiles()
+//   .then(movedFilePaths => afterProcessFiles(movedFilePaths))
+//   .catch(error => {
+//     console.error('오류 발생:', error);
+//   });

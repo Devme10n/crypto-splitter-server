@@ -56,6 +56,7 @@ async function renameFilesAndCreateMapping(originalFileNames, folderPath) {
 // Promise.all()을 사용하여 병렬로 업로드
 //---------------------------------------------------------
 // TODO: 병렬 업로드 개수 제한(Promise.all 대신 Promise.allSettled를 사용)
+// TODO: 파일들이 분산되어 저장되어야함. 파일이 저장된 서버의 주소를 기록해야함.
 /**
  * 분할된 파일들을 인터넷에 업로드
  * @description 파일 경로의 배열과 업로드 URL을 받아 FormData를 사용하여 각 파일을 비동기적으로 업로드. Promise.all()을 활용하여 업로드를 병렬로 수행.
@@ -120,7 +121,25 @@ async function saveMappingDataJsonPostgreSQL(desEncryptedFileName, mappingInfo, 
     }
 };
 
+async function manageFileUploadAndMapping(originalFileNames, folderPath, uploadUrl, encryptedPassword) {
+    try {
+        // 파일 이름 변경 및 매핑 생성
+        const { renamedFilePaths, splitFileOrderMapping, desEncryptedFileName } = await renameFilesAndCreateMapping(originalFileNames, folderPath);
+
+        // 파일 업로드
+        const uploadResults = await uploadFiles(renamedFilePaths, uploadUrl);
+
+        // 업로드 후 매핑 데이터 저장
+        await saveMappingDataJsonPostgreSQL(desEncryptedFileName, splitFileOrderMapping, encryptedPassword);
+        return uploadResults;
+    } catch (error) {
+        logger.error('파일 처리 중 오류 발생:', error);
+        throw error;
+    }
+}
+
 module.exports = {
+    manageFileUploadAndMapping,
     renameFilesAndCreateMapping,
     uploadFiles,
     saveMappingDataJsonPostgreSQL

@@ -10,12 +10,6 @@ const finished = promisify(require('stream').finished);
 const { logger } = require('../utils/logger');
 const { deleteFolderAndFiles } = require('../utils/rollbackUtils');
 
-const tempPath = path.join(__dirname, '..', 'temp');
-const internetPath = path.join(__dirname, '..', 'internet');
-const outputPath = path.join(__dirname, '..', 'output');
-const resultPath = path.join(__dirname, '..', 'result');
-const encryptedfilePath = path.join(__dirname, '..', 'encryptedfile');
-
 /**
  * 임시 디렉토리 확인 및 생성
  * @description temp 폴더가 존재하지 않으면 생성. 이미 존재하는 경우, 내용을 비우고 다시 생성.
@@ -49,7 +43,7 @@ async function ensureDirectories(...paths) {
 }
 
 //---------------------------------------------------------
-// 1. 파일 업로드 (아직 구현되지 않음)
+// 1. 파일 수신 및 저장 (아직 구현되지 않음)
 //---------------------------------------------------------
 
 //---------------------------------------------------------
@@ -230,19 +224,39 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
  */
 async function encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount) {
     try {
-        // 임시 디렉토리 설정
-        await ensureDirectories(tempPath, internetPath, outputPath, resultPath, encryptedfilePath);
-
         // 파일명을 암호화하고 변경
-        const encryptedFilePath = await processFilename(originalFilePath);
+        const encryptedFileNamePath = await processFilename(originalFilePath);
 
         // 파일을 대칭키로 암호화, 대칭키를 공개키로 암호화
-        const { outputFilePath, encryptedPassword } = await encryptFileAndKey(encryptedFilePath, publicKeyPath);
+        const { outputFilePath, encryptedPassphrase } = await encryptFileAndKey(encryptedFileNamePath, publicKeyPath);
 
         // 암호화된 파일 경로를 사용하여 파일을 분할
         const { originalFileNames, splitFilesPath } = await splitEncryptedFile(outputFilePath, splitCount);
 
-        return { encryptedPassword, originalFileNames, splitFilesPath };
+        return { encryptedPassphrase, originalFileNames, splitFilesPath };
+    } catch (error) {
+        logger.error(`파일 처리 및 분할 중 오류 발생: ${error.message}`);
+        // 롤백 로직
+        throw error;
+    }
+}
+
+/**
+ * client-side한 경우, writer.js 모듈의 최종 함수, 파일명 암호화, 파일 분할 수행.
+ * @param {*} encryptedFilePath 
+ * @param {*} encryptedPassphrase 
+ * @param {*} splitCount 
+ * @returns 
+ */
+async function processEncryptedFileAndPassphrase(encryptedFilePath, encryptedPassphrase, splitCount) {
+    try {
+        // 파일명을 암호화하고 변경
+        const encryptedFileNamePath = await processFilename(encryptedFilePath);
+
+        // 암호화된 파일 경로를 사용하여 파일을 분할
+        const { originalFileNames, splitFilesPath } = await splitEncryptedFile(encryptedFileNamePath, splitCount);
+
+        return { encryptedPassphrase, originalFileNames, splitFilesPath };
     } catch (error) {
         logger.error(`파일 처리 및 분할 중 오류 발생: ${error.message}`);
         // 롤백 로직
@@ -256,5 +270,6 @@ module.exports = {
     changeFilename,
     processFilename,
     splitEncryptedFile,
-    encryptAndSplitFile
+    encryptAndSplitFile,
+    processEncryptedFileAndPassphrase
 };
