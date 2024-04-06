@@ -1,18 +1,29 @@
 const { ensureDirectories, encryptAndSplitFile, processEncryptedFileAndPassphrase } = require('./file-processing/writer');
-const { renameFilesAndCreateMapping, uploadFiles, saveMappingDataJsonPostgreSQL, manageFileUploadAndMapping } = require('./file-processing/middle');
+const { manageFileUploadAndMapping } = require('./file-processing/middle');
 const { mergeAndDecryptFile } = require('./file-processing/reader');
-const { calculateFileHash, compareFileHash, compareMultipleFiles } = require('./utils/hashFunctions');
 
 const express = require('express');
+const multiparty = require('multiparty');
+const FormData = require('form-data');
+const fs = require('fs');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const { log } = require('console');
 const { logger } = require('./utils/logger');
 require('dotenv').config();
 
 const app = express();
+
 app.use(cors());
+app.use(express.json());
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    res.status(500).send(`Multer error: ${err.message}`);
+  } else if (err) {
+    res.status(500).send(`Unknown server error: ${err.message}`);
+  }
+});
 
 // 애플리케이션 초기화 코드
 (async () => {
@@ -38,30 +49,64 @@ const upload = multer({
   }),
 });
 
+//---------------------------------------------------------
+// 1. 파일 수신 및 저장
+//---------------------------------------------------------
 // 암호화된 파일과 passphrase를 수신하는 POST 요청 처리
 app.post('/upload', upload.any(), async (req, res) => {
   try {
-    // console.log('req.files:', req.files);
-    // console.log('req.body:', req.body);
-    // console.log('req.body[encryptedPassphrase]:', req.body['encryptedPassphrase']);
-    // console.log('req.files[0].path:', req.files[0].path);
-
     const encryptedPassphrase = req.body['encryptedPassphrase'];
     const encryptedFilePath = req.files[0].path;
     if (!encryptedPassphrase || !encryptedFilePath) {
       return res.status(400).send('No file was uploaded.');
     }
 
-    // console.log('encryptedPassphrase:', encryptedPassphrase);
-    // console.log('encryptedFilePath:', encryptedFilePath);
-
     // processFiles 함수 호출
     await processFiles(encryptedFilePath, encryptedPassphrase);
 
     res.status(200).send('File and passphrase successfully uploaded.');
   } catch (err) {
-    console.error(`File upload failed with error: ${err.message}`);
+    logger.error(`File upload failed with error: ${err.message}`);
     res.status(500).send(`File upload failed with error: ${err.message}`);
+  }
+});
+
+app.post('/file', async (req, res) => {
+  try {
+    // 요청 수신 로그
+    logger.info(`파일 업로드 요청 수신: fileName=${req.body.fileName}`);
+
+    const originalFileName = req.body.fileName;
+
+    if (!originalFileName) {
+      return res.status(400).send('파일명이 제공되지 않았습니다.');
+    }
+
+    // afterProcessFiles 함수 호출 및 결과 로깅
+    const { decryptedFileNamePath, encryptedPassphrase } = await afterProcessFiles(originalFileName);
+
+    // 새로운 form 생성 및 파일 및 암호화된 패스프레이즈 추가 로깅
+    const form = new FormData();
+    form.append('file', fs.createReadStream(decryptedFileNamePath), {
+      filename: originalFileName,
+      contentType: 'application/octet-stream',
+    });
+    logger.info(`form에 파일 추가: ${decryptedFileNamePath}`);
+
+    form.append('encryptedPassphrase', encryptedPassphrase, {
+      filename: 'encryptedPassphrase',
+      contentType: 'text/plain',
+    });
+    logger.info(`form에 암호화된 패스프레이즈 추가: ${encryptedPassphrase}`);
+
+    // 헤더 설정 및 응답 전송 로깅
+    logger.info(`헤더 설정 및 응답 전송: fileName: ${originalFileName}`);
+    res.set(form.getHeaders());
+    form.pipe(res);
+  } catch (error) {
+    // 에러 발생 시 로깅
+    logger.error({ message: `파일 전송 실패: ${originalFileName}`, error: error.toString() });
+    res.status(500).send(`파일 처리 중 오류 발생: ${error.message}`);
   }
 });
 
@@ -83,56 +128,33 @@ const publicKeyPath = path.join(__dirname, 'key', 'public_key.pem'); // FIXME: �
 const processFiles = async (originalFilePath, encryptedPassphrase) => {
   try {
     // 분할할 조각 수 설정
-    const splitCount = 100;
-
-    let encryptedPassword, originalFileNames, splitFilesPath;
+    const splitCount = Number(process.env.FILE_SPLIT_COUNT) || 100;
 
     // Client-side와 Server-side를 구분
-    // passphrase가 제공되었는지 확인
     if (encryptedPassphrase) {
       // 암호화된 파일과 passphrase를 처리
-      ({ encryptedPassword, originalFileNames, splitFilesPath } = await processEncryptedFileAndPassphrase(originalFilePath, encryptedPassphrase, splitCount));
+      // console.log("Client-side에서 암호화된 파일과 passphrase를 처리")
+      ({ encryptedPassphrase, originalFileNames, splitFilesPath } = await processEncryptedFileAndPassphrase(originalFilePath, encryptedPassphrase, splitCount));
     } else {
       // 원본 파일을 암호화
-      ({ encryptedPassword, originalFileNames, splitFilesPath } = await encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount));
+      // console.log("Server-side에서 원본 파일을 암호화")
+      ({ encryptedPassphrase, originalFileNames, splitFilesPath } = await encryptAndSplitFile(originalFilePath, publicKeyPath, splitCount));
     }
     
     // middle.js의 최종 함수
-    await manageFileUploadAndMapping(originalFileNames, splitFilesPath, process.env.UPLOAD_URL, encryptedPassphrase);
+    await manageFileUploadAndMapping(originalFileNames, splitFilesPath, `${process.env.FILE_SERVER_URL}/upload`, encryptedPassphrase);
     logger.info(`파일 처리 완료`);
-
   } catch (error) {
-    console.error('파일 처리 중 오류가 발생했습니다:', error);
+    logger.error('파일 처리 중 오류가 발생했습니다:', error);
   }
 };
 
-const afterProcessFiles = async (movedFilePaths) => {
+const afterProcessFiles = async (originalFileName) => {
   try {
-    // getFileMappingInfo 함수 실행
-    // 하드 코딩
-    const encryptedFilename = '0be8366e87a3f33ae2d2ebb5fa9bfb21'; // 사용자가 입력한 파일명을 대칭키로 암호화
+    const { decryptedFileNamePath, encryptedPassphrase } = await mergeAndDecryptFile(originalFileName)
 
-    await mergeAndDecryptFile(encryptedFilename, movedFilePaths)
-
-    // 비교하려는 파일 경로들
-    const filesToCompare = [
-      // '/Users/mac/Documents/split_file/uploadfile/0be8366e87a3f33ae2d2ebb5fa9bfb21',
-      '/Users/mac/Documents/split_file/backend/result/dummyfile.mp4',
-      // '/Users/mac/Documents/split_file/encryptedfile/0be8366e87a3f33ae2d2ebb5fa9bfb21',
-      // '/Users/mac/Documents/split_file/output/0be8366e87a3f33ae2d2ebb5fa9bfb21',
-      '/Users/mac/Documents/split_file/backend/dummyfile.mp4'
-        ];
-
-    // 파일 비교 시작
-    compareMultipleFiles(filesToCompare);
-    
+    return { decryptedFileNamePath, encryptedPassphrase };
   } catch (error) {
-    console.error('afterProcessFiles error:', error);
+    logger.error('afterProcessFiles error:', error);
   }
 };
-
-// processFiles()
-//   .then(movedFilePaths => afterProcessFiles(movedFilePaths))
-//   .catch(error => {
-//     console.error('오류 발생:', error);
-//   });
