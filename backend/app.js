@@ -57,8 +57,11 @@ app.post('/upload', upload.any(), async (req, res) => {
   try {
     const encryptedPassphrase = req.body['encryptedPassphrase'];
     const encryptedFilePath = req.files[0].path;
-    if (!encryptedPassphrase || !encryptedFilePath) {
+    if (!encryptedFilePath) {
       return res.status(400).send('No file was uploaded.');
+    }
+    else if (!encryptedPassphrase) {
+      return res.status(400).send('No passphrase was uploaded.');
     }
 
     // processFiles 함수 호출
@@ -115,12 +118,7 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-/**
- * TODO: 하드코딩된 것들
- * 2. splitCount - 분할할 조각 수 -> FIXME: dotenv
- * 4. encryptedFilename - 사용자가 입력한 파일명을 대칭키로 암호화 -> FIXME: react에서 원본 파일명을 받아와서 암호화할 것.
- * 5. filesToCompare - 비교하려는 파일 경로들 -> FIXME: 다른 방법으로 파일 경로를 받아올 것.
- */
+// TODO: https 서버로 변경
 
 // TODO: 사용자가 업로드한 publicKey 파일 경로를 받아오도록 수정
 const publicKeyPath = path.join(__dirname, 'key', 'public_key.pem'); // FIXME: 삭제 예정

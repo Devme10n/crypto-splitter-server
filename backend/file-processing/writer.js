@@ -1,4 +1,5 @@
 const splitFile = require('split-file');
+const splitFileInParallel = require('split-file-parallel');
 const fs = require('fs');
 const fsp = require('fs').promises;
 const path = require('path');
@@ -209,7 +210,7 @@ async function splitEncryptedFile(encryptedFilePath, splitCount) {
             await fsp.mkdir(splitFilesPath, { recursive: true });
         }
 
-        const originalFileNames = await splitFile.splitFile(encryptedFilePath, splitCount, splitFilesPath);
+        const originalFileNames = await splitFileInParallel.splitFileInParallel(encryptedFilePath, splitCount, splitFilesPath);
         logger.info(`파일 분할 완료: ${splitFilesPath}`);
         await deleteFolderAndFiles(encryptedFilePath);
         return { originalFileNames, splitFilesPath };

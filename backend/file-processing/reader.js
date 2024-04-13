@@ -3,6 +3,7 @@ const fsp = require('fs').promises;
 const axios = require('axios');
 const path = require('path');
 const splitFile = require('split-file');
+const splitFileInParallel = require('split-file-parallel');
 const crypto = require('crypto');
 
 const { logger } = require('../utils/logger');
