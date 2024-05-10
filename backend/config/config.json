@@ -17,10 +17,18 @@
   },
   "production": {
     "username": "mac",
-    "password": "your_password",
+    "password": "password",
     "database": "database_production",
-    "host": "127.0.0.1",
+    "host": "postgres14",
     "dialect": "postgres",
-    "logging": false
+    "dialectOptions": {
+      "connectTimeout": 60000
+    },
+    "pool": {
+      "max": 10,
+      "min": 0,
+      "idle": 10000,
+      "acquire": 60000
+    }
   }
 }
