@@ -178,12 +178,10 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,node
-TestDB/middle_db.js
-TestDB/mongoDBModels.js
-uploadfile/*
-internet/*
-encryptedfile/*
-output/*
-result/*
-internet/*
-dummyfile.mp4
+
+uploadfile
+internet
+encryptedfile
+output
+result
+internet
